@@ -1,13 +1,15 @@
 clear;
 clc;
 %%Analyse the audio
+%Note: This code only works if the person speaking has the dominant
+%frequency in the audio file. It also assumes the value of human speech
+%cannot exceed 200 Hz
 rootdirectory = 'C:\Users\nguid\Documents\EECE 5666\Project\Audio Files';
 
-[y,fs] = audioread('sentences_Static.wav');
+[y,fs] = audioread('sentences_static.wav');
 y = y';
 player = audioplayer(y,fs);
 % play(player);
-
 
 ts = 1/fs;
 total_time = (size(y,2)-1)/fs;
@@ -37,7 +39,7 @@ ylabel('Amplitude')
 xlim([0 2000])
 
 for i = 1:length(freq)
-    if freq(i) > 2000;
+    if freq(i) > 300;
         freq(i) = 0;
         amp(i) = 0;
     end 
