@@ -145,4 +145,36 @@ size(predictors)
 reset(adsTrain)
 T = tall(adsTrain)
 
+% Extract target and predictor magnitude STFT from tall table
+[targets,predictors] = cellfun(@(x)HelperGenerateSpeechDenoisingFeatures(x,noise,src),T,"UniformOutput",false);
+% Use gather to evaluate targets and predictors
+[targets,predictors] = gather(targets,predictors);
+
+% Normalize the Data
+predictors = cat(3,predictors{:});
+noisyMean = mean(predictors(:));
+noisyStd = std(predictors(:));
+predictors(:) = (predictors(:) - noisyMean)/noisyStd;
+
+targets = cat(2,targets{:});
+cleanMean = mean(targets(:));
+cleanStd = std(targets(:));
+targets(:) = (targets(:) - cleanMean)/cleanStd;
+
+%Reshape  predictors and targets to the dimensions expected by the deep
+%learning networks.
+predictors = reshape(predictors,size(predictors,1),size(predictors,2),1,size(predictors,3));
+targets = reshape(targets,1,1,size(targets,1),size(targets,2));
+% Randomly split the data into training and validation sets.
+inds = randperm(size(predictors,4));
+L = round(0.99 * size(predictors,4));
+
+trainPredictors = predictors(:,:,:,inds(1:L));
+trainTargets = targets(:,:,:,inds(1:L));
+
+validatePredictors = predictors(:,:,:,inds(L+1:end));
+validateTargets = targets(:,:,:,inds(L+1:end));
+%%
+
+
 
