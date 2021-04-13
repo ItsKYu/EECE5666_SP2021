@@ -17,7 +17,7 @@
 %% Problem Summary
 
 % Consider the clean speech signal
-[cleanAudio,fs] = audioread("Audio_003.wav"); %Audio 3 is spoken word "Happy"
+[cleanAudio,fs] = audioread("harvard_11_1.wav"); % Harvard Sentences list 11 # 1
 sound(cleanAudio,fs)
 pause
 
@@ -315,20 +315,58 @@ fprintf("The number of weights in convolutional layers is %d\n",numWeights);
 
 %% Test the Denoising Networks
 
-% Read in test dataset
-adsTest = audioDatastore(fullfile(dataFolder,'test'),'IncludeSubfolders',true);
-% Read contents of a file from the datastore
-[cleanAudio,adsTestInfo] = read(adsTest);
-% Ensure audio length is a multiple of sample rate converter decimation
-% factor
+% % Read in test dataset
+% adsTest = audioDatastore(fullfile(dataFolder,'test'),'IncludeSubfolders',true);
+% % Read contents of a file from the datastore
+% [cleanAudio,adsTestInfo] = read(adsTest);
+% % Ensure audio length is a multiple of sample rate converter decimation
+% % factor
+
+% Read in custom file
+[cleanAudio,Fs] = audioread("harvard_62_9.wav"); % Harvard Sentences list 11 # 1
+
+fs = 8e3; % output frequency sampling
+decimationFactor = Fs/fs;
+
 L = floor(numel(cleanAudio)/decimationFactor);
 cleanAudio = cleanAudio(1:decimationFactor*L);
+
+% Create new obj to convert sample rate from 16k to 8k
+src16 = dsp.SampleRateConverter("InputSampleRate",Fs, ...
+                              "OutputSampleRate",fs, ...
+                              "Bandwidth",7920);
 % Convert the audio signal to 8kHz
-cleanAudio = src(cleanAudio);
-reset(src)
+cleanAudio = src16(cleanAudio);
+reset(src16)
 
 % Add noise not used in training
-noise = audioread("WashingMachine-16-8-mono-200secs.mp3");
+%noise = audioread("WashingMachine-16-8-mono-200secs.mp3");
+noise = audioread("relaxing_piano.mp3");
+                                        % Calm and Relaxing Piano by Free Music | https://soundcloud.com/fm_freemusic
+                                        % Music promoted by https://www.free-stock-music.com
+                                        % Creative Commons Attribution 3.0 Unported License
+                                        % https://creativecommons.org/licenses/by/3.0/deed.en_US
+% elininate 2 channel issue
+sizenoise = size(noise);
+if sizenoise(2) == 2
+    noise = sqrt(noise(:,1).^2 + noise(:,2).^2);
+end
+
+decimationFactor_n = 44100/fs;
+% ensure correct decimation
+L = floor(numel(noise)/decimationFactor_n);
+noise = noise(1:decimationFactor_n*L);
+
+% Create new obj to convert sample rate from 44.1k to 8k
+src44_1 = dsp.SampleRateConverter("InputSampleRate",44100, ...
+                              "OutputSampleRate",fs, ...
+                              "Bandwidth",7920);
+
+
+% Convert the noise signal to 8kHz
+noise = src44_1(noise);
+reset(src44_1)
+
 % Create randomnoise segment
 randind = randi(numel(noise) - numel(cleanAudio), [1 1]);
 noiseSegment = noise(randind : randind + numel(cleanAudio) - 1);
