@@ -5,9 +5,10 @@
 %  Adaptations made by Ethan Marcello
 %  
 %  UPDATE LOG:
-%  4/11/2021
+%  4/13/2021
 %  - Copied over and built initial script (parts Problem summary through
-%       XX)
+%       Analysis of results for fully connected and convolutional NNs)
+%
 %  
 %
 %
@@ -174,7 +175,269 @@ trainTargets = targets(:,:,:,inds(1:L));
 
 validatePredictors = predictors(:,:,:,inds(L+1:end));
 validateTargets = targets(:,:,:,inds(L+1:end));
-%%
+%% Speech Denoising with Fully Connected Layers
+
+% Optional save workspace features. Some files are very large.
+% save('workspace_chkpt1.mat','-nocompression','-v7.3')
+
+% Load in data so you don't need to re-extract features
+% load('workspace_chkpt1.mat')
+%
+
+
+layers = [
+    imageInputLayer([numFeatures,numSegments])
+    fullyConnectedLayer(1024)
+    batchNormalizationLayer
+    reluLayer
+    fullyConnectedLayer(1024)
+    batchNormalizationLayer
+    reluLayer
+    fullyConnectedLayer(numFeatures)
+    regressionLayer
+    ];
+
+% Specify training options for the network
+miniBatchSize = 128;
+options = trainingOptions("adam", ...
+    "MaxEpochs",3, ...
+    "InitialLearnRate",1e-5,...
+    "MiniBatchSize",miniBatchSize, ...
+    "Shuffle","every-epoch", ...
+    "Plots","training-progress", ...
+    "Verbose",false, ...
+    "ValidationFrequency",floor(size(trainPredictors,4)/miniBatchSize), ...
+    "LearnRateSchedule","piecewise", ...
+    "LearnRateDropFactor",0.9, ...
+    "LearnRateDropPeriod",1, ...
+    "ValidationData",{validatePredictors,validateTargets});
+
+% Train the network
+doTraining = false;
+if doTraining
+    denoiseNetFullyConnected = trainNetwork(trainPredictors,trainTargets,layers,options);
+else
+    url = 'http://ssd.mathworks.com/supportfiles/audio/SpeechDenoising.zip';
+    downloadNetFolder = tempdir;
+    netFolder = fullfile(downloadNetFolder,'SpeechDenoising');
+    if ~exist(netFolder,'dir')
+        disp('Downloading pretrained network (1 file - 8 MB) ...')
+        unzip(url,downloadNetFolder)
+    end
+    s = load(fullfile(netFolder,"denoisenet.mat"));
+    denoiseNetFullyConnected = s.denoiseNetFullyConnected;
+    cleanMean = s.cleanMean;
+    cleanStd = s.cleanStd;
+    noisyMean = s.noisyMean;
+    noisyStd = s.noisyStd;
+end
+% Count the number of weights in the fully connected layers
+numWeights = 0;
+for index = 1:numel(denoiseNetFullyConnected.Layers)
+    if isa(denoiseNetFullyConnected.Layers(index),"nnet.cnn.layer.FullyConnectedLayer")
+        numWeights = numWeights + numel(denoiseNetFullyConnected.Layers(index).Weights);
+    end
+end
+fprintf("The number of weights is %d.\n",numWeights);
+
+%% Speech Denoising with Convolutional Layers
+
+layers = [imageInputLayer([numFeatures,numSegments])
+          convolution2dLayer([9 8],18,"Stride",[1 100],"Padding","same")
+          batchNormalizationLayer
+          reluLayer
+          
+          repmat( ...
+          [convolution2dLayer([5 1],30,"Stride",[1 100],"Padding","same")
+          batchNormalizationLayer
+          reluLayer
+          convolution2dLayer([9 1],8,"Stride",[1 100],"Padding","same")
+          batchNormalizationLayer
+          reluLayer
+          convolution2dLayer([9 1],18,"Stride",[1 100],"Padding","same")
+          batchNormalizationLayer
+          reluLayer],4,1)
+          
+          convolution2dLayer([5 1],30,"Stride",[1 100],"Padding","same")
+          batchNormalizationLayer
+          reluLayer
+          convolution2dLayer([9 1],8,"Stride",[1 100],"Padding","same")
+          batchNormalizationLayer
+          reluLayer
+          
+          convolution2dLayer([129 1],1,"Stride",[1 100],"Padding","same")
+          
+          regressionLayer
+          ];
+
+options = trainingOptions("adam", ...
+    "MaxEpochs",3, ...
+    "InitialLearnRate",1e-5, ...
+    "MiniBatchSize",miniBatchSize, ...
+    "Shuffle","every-epoch", ...
+    "Plots","training-progress", ...
+    "Verbose",false, ...
+    "ValidationFrequency",floor(size(trainPredictors,4)/miniBatchSize), ...
+    "LearnRateSchedule","piecewise", ...
+    "LearnRateDropFactor",0.9, ...
+    "LearnRateDropPeriod",1, ...
+    "ValidationData",{validatePredictors,permute(validateTargets,[3 1 2 4])});
+
+% Training
+doTraining = true;
+if doTraining
+    denoiseNetFullyConvolutional = trainNetwork(trainPredictors,permute(trainTargets,[3 1 2 4]),layers,options);
+else
+    url = 'http://ssd.mathworks.com/supportfiles/audio/SpeechDenoising.zip';
+    downloadNetFolder = tempdir;
+    netFolder = fullfile(downloadNetFolder,'SpeechDenoising');
+    if ~exist(netFolder,'dir')
+        disp('Downloading pretrained network (1 file - 8 MB) ...')
+        unzip(url,downloadNetFolder)
+    end
+    s = load(fullfile(netFolder,"denoisenet.mat"));
+    denoiseNetFullyConvolutional = s.denoiseNetFullyConvolutional;
+    cleanMean = s.cleanMean;
+    cleanStd = s.cleanStd;
+    noisyMean = s.noisyMean;
+    noisyStd = s.noisyStd;
+end
+      
+numWeights = 0;
+for index = 1:numel(denoiseNetFullyConvolutional.Layers)
+    if isa(denoiseNetFullyConvolutional.Layers(index),"nnet.cnn.layer.Convolution2DLayer")
+        numWeights = numWeights + numel(denoiseNetFullyConvolutional.Layers(index).Weights);
+    end
+end
+fprintf("The number of weights in convolutional layers is %d\n",numWeights);
+
+
+
+%% Test the Denoising Networks
+
+% Read in test dataset
+adsTest = audioDatastore(fullfile(dataFolder,'test'),'IncludeSubfolders',true);
+% Read contents of a file from the datastore
+[cleanAudio,adsTestInfo] = read(adsTest);
+% Ensure audio length is a multiple of sample rate converter decimation
+% factor
+L = floor(numel(cleanAudio)/decimationFactor);
+cleanAudio = cleanAudio(1:decimationFactor*L);
+% Convert the audio signal to 8kHz
+cleanAudio = src(cleanAudio);
+reset(src)
+
+% Add noise not used in training
+noise = audioread("WashingMachine-16-8-mono-200secs.mp3");
+% Create randomnoise segment
+randind = randi(numel(noise) - numel(cleanAudio), [1 1]);
+noiseSegment = noise(randind : randind + numel(cleanAudio) - 1);
+% add noise to speech such that SNR is 0dB
+noisePower = sum(noiseSegment.^2);
+cleanPower = sum(cleanAudio.^2);
+noiseSegment = noiseSegment .* sqrt(cleanPower/noisePower);
+noisyAudio = cleanAudio + noiseSegment;
+
+%STFT vectors
+noisySTFT = stft(noisyAudio,'Window',win,'OverlapLength',overlap,'FFTLength',ffTLength);
+noisyPhase = angle(noisySTFT(numFeatures-1:end,:));
+noisySTFT = abs(noisySTFT(numFeatures-1:end,:));
+% Generate 8 segment training predictor signals overlap of 7
+noisySTFT = [noisySTFT(:,1:numSegments-1) noisySTFT];
+predictors = zeros( numFeatures, numSegments , size(noisySTFT,2) - numSegments + 1);
+for index = 1:(size(noisySTFT,2) - numSegments + 1)
+    predictors(:,:,index) = noisySTFT(:,index:index + numSegments - 1); 
+end
+
+% normalize predictors
+predictors(:) = (predictors(:) - noisyMean) / noisyStd;
+%compute denoised magnitude
+predictors = reshape(predictors, [numFeatures,numSegments,1,size(predictors,3)]);
+STFTFullyConnected = predict(denoiseNetFullyConnected, predictors);
+STFTFullyConvolutional = predict(denoiseNetFullyConvolutional, predictors);
+%scale outputs by mena and std deviation used in training stage
+STFTFullyConnected(:) = cleanStd * STFTFullyConnected(:) + cleanMean;
+STFTFullyConvolutional(:) = cleanStd * STFTFullyConvolutional(:) + cleanMean;
+%convert one-sided STFT to centered STFT
+STFTFullyConnected = STFTFullyConnected.' .* exp(1j*noisyPhase);
+STFTFullyConnected = [conj(STFTFullyConnected(end-1:-1:2,:)); STFTFullyConnected];
+STFTFullyConvolutional = squeeze(STFTFullyConvolutional) .* exp(1j*noisyPhase);
+STFTFullyConvolutional = [conj(STFTFullyConvolutional(end-1:-1:2,:)) ; STFTFullyConvolutional];
+%Compute denoised speech signals, reconstruct time domain
+denoisedAudioFullyConnected = istft(STFTFullyConnected,  ...
+                                    'Window',win,'OverlapLength',overlap, ...
+                                    'FFTLength',ffTLength,'ConjugateSymmetric',true);
+                                
+denoisedAudioFullyConvolutional = istft(STFTFullyConvolutional,  ...
+                                        'Window',win,'OverlapLength',overlap, ...
+                                        'FFTLength',ffTLength,'ConjugateSymmetric',true);
+
+
+%% Plot time domain
+t = (1/fs) * (0:numel(denoisedAudioFullyConnected)-1);
+
+figure
+
+subplot(4,1,1)
+plot(t,cleanAudio(1:numel(denoisedAudioFullyConnected)))
+title("Clean Speech")
+grid on
+
+subplot(4,1,2)
+plot(t,noisyAudio(1:numel(denoisedAudioFullyConnected)))
+title("Noisy Speech")
+grid on
+
+subplot(4,1,3)
+plot(t,denoisedAudioFullyConnected)
+title("Denoised Speech (Fully Connected Layers)")
+grid on
+
+subplot(4,1,4)
+plot(t,denoisedAudioFullyConvolutional)
+title("Denoised Speech (Convolutional Layers)")
+grid on
+xlabel("Time (s)")
+                                    
+%% Plot Spectrograms
+
+h = figure;
+
+subplot(4,1,1)
+spectrogram(cleanAudio,win,overlap,ffTLength,fs);
+title("Clean Speech")
+grid on
+
+subplot(4,1,2)
+spectrogram(noisyAudio,win,overlap,ffTLength,fs);
+title("Noisy Speech")
+grid on
+
+subplot(4,1,3)
+spectrogram(denoisedAudioFullyConnected,win,overlap,ffTLength,fs);
+title("Denoised Speech (Fully Connected Layers)")
+grid on
+
+subplot(4,1,4)
+spectrogram(denoisedAudioFullyConvolutional,win,overlap,ffTLength,fs);
+title("Denoised Speech (Convolutional Layers)")
+grid on
+
+p = get(h,'Position');
+set(h,'Position',[p(1) 65 p(3) 800]);
+                                    
+%% Listen to speech signals
+
+sound(noisyAudio,fs)
+pause
+sound(denoisedAudioFullyConnected,fs)
+pause
+sound(denoisedAudioFullyConvolutional,fs)
+pause
+sound(cleanAudio,fs)
+
+%% Call function to test more files from the datastore
+[cleanAudio,noisyAudio,denoisedAudioFullyConnected,denoisedAudioFullyConvolutional] = testDenoisingNets(adsTest,denoiseNetFullyConnected,denoiseNetFullyConvolutional,noisyMean,noisyStd,cleanMean,cleanStd);
 
 
 
