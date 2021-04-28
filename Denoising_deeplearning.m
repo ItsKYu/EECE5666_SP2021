@@ -17,7 +17,7 @@
 %% Problem Summary
 
 % Consider the clean speech signal
-[cleanAudio,fs] = audioread("harvard_11_1.wav"); % Harvard Sentences list 11 # 1
+[cleanAudio,fs] = audioread("FC_harvard_62_9.wav"); % Harvard Sentences list 11 # 1
 sound(cleanAudio,fs)
 pause
 
@@ -284,7 +284,7 @@ options = trainingOptions("adam", ...
     "ValidationData",{validatePredictors,permute(validateTargets,[3 1 2 4])});
 
 % Training
-doTraining = true;
+doTraining = false;
 if doTraining
     denoiseNetFullyConvolutional = trainNetwork(trainPredictors,permute(trainTargets,[3 1 2 4]),layers,options);
 else
@@ -352,7 +352,7 @@ if sizenoise(2) == 2
     noise = sqrt(noise(:,1).^2 + noise(:,2).^2);
 end
 
-decimationFactor_n = 44100/fs;
+decimationFactor_n = 441;
 % ensure correct decimation
 L = floor(numel(noise)/decimationFactor_n);
 noise = noise(1:decimationFactor_n*L);
