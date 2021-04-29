@@ -25,5 +25,5 @@ Data figures not included in the report can be found in the "Figures" branch.
 
 --Hardware and Software for Data Collection--
 A Google Pixel 3XL phone was used as a microphone with the Audio Recorder free app from the Google Play Store. Link to the app and app support are no longer available.
-MATLAB deep-learning and VAD toolbox used for analysis. 
+MATLAB deep-learning and VAD toolboxes used for analysis. 
 MATLAB filtering commands and techniques used for analysis. 
