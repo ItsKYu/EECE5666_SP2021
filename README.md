@@ -15,13 +15,13 @@ noisy_harvard_11_1.wav -> Noisy audio of Harvard Sentences List 11 Line 1.
 noisy_harvard_11_2.wav -> Noisy audio of Harvard Sentences List 11 Line 2. 
 noisy_harvard_62_9.wav -> Noisy audio of Harvard Sentences List 62 Line 9. 
 
-The deep learning code utilized for these signals can also be found in the main branch. 
+The deep learning code utilized for these signals can also be found in the main directory. 
 
-The processed and denoised counterparts to these files can be found in the "Denoised Audio" branch. 
+The processed and denoised counterparts to these files can be found in the "Denoised Audio" directory. 
 
-The finalized filtering and VAD code for this project can be found in the "Finalized Code" branch. 
+The finalized filtering and VAD code for this project can be found in the "Finalized Code" directory. 
 
-Data figures not included in the report can be found in the "Figures" branch. 
+Data figures included and not included in the report can be found in the "Figures" directory. 
 
 --Hardware and Software for Data Collection--
 A Google Pixel 3XL phone was used as a microphone with the Audio Recorder free app from the Google Play Store. Link to the app and app support are no longer available.
